@@ -19,7 +19,6 @@ import org.eclipse.jetty.util.Promise;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Phaser;
 import java.util.concurrent.TimeUnit;
 
@@ -42,9 +41,6 @@ public class ALPNExampleClient {
     String host = "nghttp2.org";
     int port = 443;
 
-//    host="sy.ndro.me";
-//    port = 444;
-    
     FuturePromise<Session> sessionPromise = new FuturePromise<>();
     client.connect(sslContextFactory, new InetSocketAddress(host, port), new ServerSessionListener.Adapter(), sessionPromise);
     Session session = sessionPromise.get(5, TimeUnit.SECONDS);
@@ -56,13 +52,8 @@ public class ALPNExampleClient {
     HeadersFrame headersFrame = new HeadersFrame(metaData, null, true);
     final Phaser phaser = new Phaser(2);
     session.newStream(headersFrame, new Promise.Adapter<>(), new Stream.Listener.Adapter() {
-      private int rejected = -1;
-      
       @Override
       public void onHeaders(Stream stream, HeadersFrame frame) {
-        if (rejected == frame.getStreamId()) {
-          stream.reset(new ResetFrame(frame.getStreamId(), 0), new Callback() {});
-        }
         System.err.println("Headers: " + frame.getMetaData() + " (stream " + frame.getStreamId() + ")");
         if (frame.isEndStream())
           phaser.arrive();
@@ -70,9 +61,6 @@ public class ALPNExampleClient {
 
       @Override
       public void onData(Stream stream, DataFrame frame, Callback callback) {
-        if (rejected == frame.getStreamId()) {
-          stream.reset(new ResetFrame(frame.getStreamId(), 0), new Callback() {});
-        }
         System.err.println("Data: " + frame + " (stream " + frame.getStreamId() + ")");
         callback.succeeded();
         if (frame.isEndStream())
@@ -81,8 +69,8 @@ public class ALPNExampleClient {
 
       @Override
       public Stream.Listener onPush(Stream stream, PushPromiseFrame frame) {
-        System.err.println("Push: " + frame.getMetaData() + " (stream " + frame.getStreamId() + " => " + frame.getPromisedStreamId() + ")");
-        rejected = frame.getPromisedStreamId();
+        System.err.println("Push: " + frame.getMetaData() + " (stream " + frame.getStreamId() + " => "
+                + frame.getPromisedStreamId() + ")");
         phaser.register();
         return this;
       }
@@ -92,12 +80,6 @@ public class ALPNExampleClient {
 
     client.stop();
 
-  }
-
-  private static String dump(DataFrame frame) {
-    byte[] buf = new byte[frame.getData().remaining()];
-    System.arraycopy(frame.getData().array(), frame.getData().position(), buf, 0, frame.getData().remaining());
-    return new String(buf, StandardCharsets.UTF_8);
   }
 
 }
